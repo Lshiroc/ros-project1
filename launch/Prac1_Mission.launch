@@ -2,8 +2,8 @@
 	<node name="Stage" pkg="stage_ros" type="stageros" args="$(find first_demo)/worlds/mundo.world"/>
 
 	<node name="talkerGoals" pkg="first_demo" type="talkerGoals" output="screen">
-		<param name="X_GOAL" value="0" />
-		<param name="Y_GOAL" value="-9.5" />
+		<param name="X_GOAL" value="-8.0" />
+		<param name="Y_GOAL" value="-3.0" />
 		<param name="T_GOAL" value="5" />
 	</node>
 
@@ -13,7 +13,7 @@
 		<param name="CRIT_DIST" value="1" />
 		<param name="V_MAX_DES" value="1" />
 		<param name="V_MAX_ROT" value="1" />
-		<param name="D_OBJ" value="0.4" />
+		<param name="D_OBJ" value="0.6" />
 		<param name="K_ROT_MIN" value="0.1" />
 		<param name="K_ROT_MAX" value="0.25" />
 		<param name="ORI_ERROR" value="0.15" />
@@ -32,7 +32,7 @@
 		<param name="CRIT_DIST" value="1" />
 		<param name="V_MAX_DES" value="1" />
 		<param name="V_MAX_ROT" value="1" />
-		<param name="D_OBJ" value="0.4" />
+		<param name="D_OBJ" value="0.6" />
 		<param name="K_ROT_MIN" value="0.1" />
 		<param name="K_ROT_MAX" value="0.25" />
 		<param name="ORI_ERROR" value="0.15" />

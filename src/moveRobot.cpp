@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-// ---- global state (defined here, once) ----
+// ---- global state ----
 static Parameters params;
 static RobotData robot;
 static State state = WAIT_GOAL;
@@ -195,7 +195,7 @@ void potentialFieldsController() {
 	ros::Time now = ros::Time::now();
 	if (!have_decision || (now - last_decision).toSec() >= params.T_WAIT / 1000.0) {
 		double ori_error = wrapAngle(std::atan2(dy, dx) - robot.Thetar);
-		V_goal.x = std::cos(ori_error);// unit vector, robot frame
+		V_goal.x = std::cos(ori_error); // unit vector, robot frame
 		V_goal.y = std::sin(ori_error);
 		updateVobs();
 
@@ -212,12 +212,12 @@ void potentialFieldsController() {
 		}
 		last_decision = now;
 		have_decision = true;
-		ROS_INFO("PF: Vg=(%.2f,%.2f) Vobs=(%.2f,%.2f) err=%.2f lin=%.2f ang=%.2f",
-		         V_goal.x, V_goal.y, V_obs.x, V_obs.y,
-		         std::atan2(V_f.y, V_f.x), pf_lin, pf_ang);
+		ROS_INFO_THROTTLE(0.5, "%d[PF] dist=%.2f err=%.1f deg",
+	                  params.ID_ROBOT, distance, ori_error * 180 / M_PI);
 	}
 
-	cmd_vel.linear.x = pf_lin;                           // last decision, sent every cycle
+	// last decision, sent every cycle
+	cmd_vel.linear.x = pf_lin;
 	cmd_vel.angular.z = pf_ang;
 	cmd_vel_pub.publish(cmd_vel);
 }
@@ -240,12 +240,14 @@ int main(int argc, char **argv) {
 	ros::Subscriber laser_sub = nh.subscribe(prefix + "/base_scan_1", 1, callbackLaser);
 
 	ros::Subscriber goal_sub;
-	if (params.ROBOT_ROLE == 1) {                        // follower: goal = leader's position
+	if (params.ROBOT_ROLE == 1) { 
+		// follower: goal = leader's position
 		std::ostringstream leader;
 		leader << "robot_" << params.ID_LEADER;
 		goal_sub = nh.subscribe(leader.str() + "/position", 1, callbackGoal);
 		params.D_OBJ = params.DIST_LEADER;
-	} else {                                             // leader: goal from talkerGoals
+	} else { 
+		// leader: goal from talkerGoals
 		goal_sub = nh.subscribe("/myGoals", 10, callbackGoal);
 	}
 

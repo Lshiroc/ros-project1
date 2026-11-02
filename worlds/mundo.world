@@ -7,10 +7,10 @@ include "sick.inc"
 
 window
 ( 
-  size [ 695 750 ] 
-  center [-2.280 2.486] 
-  rotate [ 28.000 -154.000 ]
-  scale 31.046 
+  size [ 1000 1000 ] 
+  center [0.000 0.000] 
+  rotate [ 0.000 0.000 ]
+  scale 55.000 
   show_data 1 # make sure we can see the effect of the controller
 )
 
@@ -22,20 +22,15 @@ floorplan
   bitmap "bitmaps/rink.png"  
 )
 
-floorplan2
+model
 (
- name "verde"
- size [2.000 2.000 0.000]
- pose [8.000 6.000 0.000 0.000 ]
- color "green"
-)
-
-floorplan2
-(
- name "verde2"
- size [2.000 2.000 0.000]
- pose [0.000 -10.000 0.000 0.000 ]
- color "green"
+  name "goal"
+  size [1.200 1.200 0.010]
+  pose [-8.000 -3.000 0.000 0.000]
+  color "green"
+  obstacle_return 0     # robots can drive through it
+  ranger_return -1      # invisible to the laser
+  gui_move 1            # lets you drag it with the mouse
 )
 
 floorplan
@@ -129,7 +124,7 @@ floorplan
 pioneer2dx
 (
   name "robot_0"
-  pose [ -11.333 6.307 0.000 177.617 ]
+  pose [ 7.000 -7.000 0.000 0.000 ]
   color "blue"
   sicklaser
   ( 
@@ -143,7 +138,7 @@ pioneer2dx
 pioneer2dx
 (
   name "robot_1"
-  pose [ -0.300 -0.889 0.000 0.000 ]
+  pose [ 5.000 -7.000 0.000 0.000 ]
   color "red"
   sicklaser
   ( 
@@ -153,45 +148,3 @@ pioneer2dx
    alwayson 1 # don't wait for a subscriber
   ) 
 )
-
-#pioneer2dx
-#(
-#  name "robot_2"
-#  pose [ -4.014 0.257 0.000 0.000 ]
-#  color "purple"
-#  sicklaser
-#  ( 
-#     # plug the ../examples/ctrl/lasernoise.cc module into this laser
-#     ctrl "lasernoise"
-#
-#   alwayson 1 # don't wait for a subscriber
-#  ) 
-#)
-
-#pioneer2dx
-#(
-#  name "robot_3"
-#  pose [ 2.000 2.000 0.000 0.000 ]
-#  color "yellow"
-#  sicklaser
-#  ( 
-#     # plug the ../examples/ctrl/lasernoise.cc module into this laser
-#     ctrl "lasernoise"
-#
-#   alwayson 1 # don't wait for a subscriber
-#  )
-#)
-
-#pioneer2dx
-#(
-#  name "robot_4"
-#  pose [ 3.513 2.186 0.000 0.000 ]
-#  color "pink"
-#  sicklaser
-#  ( 
-#     # plug the ../examples/ctrl/lasernoise.cc module into this laser
-#     ctrl "lasernoise"
-#
-#   alwayson 1 # don't wait for a subscriber
-#  )
-#)
