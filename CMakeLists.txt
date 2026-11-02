@@ -25,7 +25,7 @@ add_executable(talkerGoals src/talkerGoals.cpp)
 target_link_libraries(talkerGoals ${catkin_LIBRARIES})
 #add_dependencies(talkerGoals first_demo_generate_messages_cpp)
 
-add_executable(moveRobot src/moveRobot.cpp src/MoveRobot.cpp)
+add_executable(moveRobot src/moveRobot.cpp)
 
 target_link_libraries(moveRobot ${catkin_LIBRARIES})
 #add_dependencies(moveRobot first_demo_generate_messages_cpp)

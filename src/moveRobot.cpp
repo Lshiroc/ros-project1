@@ -1,342 +1,260 @@
+#include "first_demo/moveRobot.h"
 #include "ros/ros.h"
-#include "std_msgs/Int32.h"
-#include <iostream>
-#include "geometry_msgs/Point.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Vector3.h"
-#include "sensor_msgs/LaserScan.h"
-#include "nav_msgs/Odometry.h"
-#include <string>
+#include <tf/transform_datatypes.h>
 #include <cmath>
-#include <tf/transform_listener.h>
-#include "first_demo/moveRobot.h"
-/*
-ros::Publisher cmd_vel_pub;
-geometry_msgs::Point goal;
-// ros params
-int ID_ROBOT;
-double CRIT_DIST;
-double V_MAX_DES;
-double V_MAX_ROT;
-double D_OBJ;
-double K_ROT_MIN;
-double K_ROT_MAX;
-double ORI_ERROR;
-double T_AVOID_OBS;
-double DIST_LEADER;
-int ROBOT_ROLE;
-int ID_LEADER;
-double W_1;
-double W_2;
-int T_WAIT;
-int ALGOR;
+#include <sstream>
+#include <string>
 
-// code specific
-double ori_error{};
-ros::Time time_begin = ros::Time(0);
-ros::Time time_end = ros::Time(0);
-bool is_intense;
-bool have_odom = false;
-double dist_goal = 1e9;
-bool rot_left_or_right = false; // false->left, true->right
-const double CONE_HALF_ANGLE = 0.35;
-bool is_goal_set = false;
-geometry_msgs::Vector3 V_goal;
-geometry_msgs::Vector3 V_obs;
-geometry_msgs::Vector3 V_f;
-ros::Time last_decision = ros::Time(0);
-bool have_decision = false;
-double pf_ang = 0;
-double pf_lin = 0;
+// ---- global state (defined here, once) ----
+static Parameters params;
+static RobotData robot;
+static State state = WAIT_GOAL;
+static ros::Publisher cmd_vel_pub, position_pub;
+static geometry_msgs::Vector3 V_goal, V_obs, V_f;
+static ros::Time start;
+static ros::Time last_decision;
+static bool have_decision = false;
+static double pf_lin = 0.0, pf_ang = 0.0;
+static double d_min = 1e9;
 
-State state = FACE_GOAL;
-
-std::string printStateName(State stateName) {
-	std::string str;
-	switch(stateName) {
-		case FACE_GOAL:
-			str = "FACE_GOAL";
-			break;
-		case GO:
-			str = "GO";
-			break;
-		case ROTATE:
-			str = "ROTATE";
-			break;
-		case FORWARD:
-			str = "FORWARD";
-			break;
-		case STOP:
-			str = "STOP";
-			break;
-		case DONE:
-			str = "DONE";
-			break;
-	}
-
-	return str;
+// ---- helpers ----
+double wrapAngle(double a) {
+	return std::atan2(std::sin(a), std::cos(a));
 }
 
-double wrapAngleInRadian(double radian)
-{
-	double twoPi = 2.0 * M_PI;
-	return radian - twoPi * floor((radian + M_PI) / twoPi );
-}
-
-
-double rotVel(double e) {
-	double k = (std::fabs(e) < ORI_ERROR) ? K_ROT_MIN : K_ROT_MAX;
-	return k * V_MAX_ROT * e;
-}
-
-void potentialFieldStep(geometry_msgs::Twist &cmd) {
-	double stop_dist = (ROBOT_ROLE == 1) ? DIST_LEADER : D_OBJ;
-	if (dist_goal < stop_dist) {
-		pf_lin = 0.0;
-		pf_ang = 0.0;
-		cmd.linear.x = 0.0;
-		cmd.angular.z = 0.0;
-		return;
-	}
-	ros::Time now = ros::Time::now();
-	if (!have_decision || (now.toSec() - last_decision.toSec()) >= T_WAIT / 1000.0) {
-		V_f.x = W_1*V_goal.x + W_2*V_obs.x;
-		V_f.y = W_1*V_goal.y + W_2*V_obs.y;
-
-		if (std::hypot(V_f.x, V_f.y) > 1e-6) {
-			double heading_err = std::atan2(V_f.y, V_f.x);
-			pf_ang = rotVel(heading_err);
-			pf_lin = (std::fabs(heading_err) < ORI_ERROR) ? V_MAX_DES : 0.0;
-		}	
-
-		last_decision = now;
-		have_decision = true;
-	}
-
-	cmd.linear.x  = pf_lin;
-	cmd.angular.z = pf_ang;
-}
-
-// Calculate orientation error
-double calcOriError(geometry_msgs::Point goal, geometry_msgs::Point robot, double yaw) {
-	//return std::atan2(goal.linear.y - robot.linear.y,);
-	return wrapAngleInRadian(std::atan2(goal.y - robot.y, goal.x - robot.x) - yaw);
-}
-
-// Simple obstacle avoidance
-void cmdVel() {
-	geometry_msgs::Twist cmd_vel;
-
-	cmd_vel.linear.x = 0.0;
-	cmd_vel.linear.y = 0.0;
-	cmd_vel.linear.z = 0.0;
-	cmd_vel.angular.x = 0.0;
-	cmd_vel.angular.y = 0.0;
-	cmd_vel.angular.z = 0.0;
-
-	if (ALGOR == 2) {
-		potentialFieldStep(cmd_vel);
-	} else {
-	switch(state) {
-		case FACE_GOAL:
-			cmd_vel.angular.z = rotVel(ori_error);
-			if (std::fabs(ori_error) < ORI_ERROR) state = GO;
-			break;
-		case GO:
-			cmd_vel.angular.z = rotVel(ori_error);
-			cmd_vel.linear.x = V_MAX_DES;
-			if (dist_goal < D_OBJ) state = DONE;
-			break;
-		case ROTATE:
-			// decide which direction would be faster, and if possible remember what obstacles was on each sides of the robot.
-			// for now lets just make it rotate to left
-			cmd_vel.angular.z = (rot_left_or_right ? 1 : -1) * V_MAX_ROT;
-			if (!is_intense) state = FORWARD;
-			break;
-		case FORWARD:
-			if (time_begin.isZero()) {
-				time_begin = ros::Time::now();			
-			} else {
-				time_end = ros::Time::now();
-				if (time_end.toSec() - time_begin.toSec() < T_AVOID_OBS) {
-					cmd_vel.linear.x = V_MAX_DES;				
-				} else {
-					state = FACE_GOAL;
-					time_begin = ros::Time(0);
-					time_end = ros::Time(0);			
-				}
-
-				//ROS_INFO("end: %lf, begin: %lf, sub: %lf, t_avoid: %lf", time_end.toSec(), time_begin.toSec(), time_end.toSec() - time_begin.toSec(), T_AVOID_OBS);
-			}
-			break;
-		case STOP:
-			if (dist_goal >= DIST_LEADER) state = GO;
-			break;
-		case DONE:
-			ROS_INFO_ONCE("Goal reached");
-			break;
-	}
-	}
-		
-
-	cmd_vel_pub.publish(cmd_vel);
-}
-
-void callbackGoal(const geometry_msgs::Point::ConstPtr& p) {
-	goal.x = p->x;
-	goal.y = p->y;
-	is_goal_set = true;
+double rotVel(double err) {
+	double k = (std::fabs(err) > params.ORI_ERROR) ? params.K_ROT_MAX : params.K_ROT_MIN;
+	return k * params.V_MAX_ROT * err;
 }
 
 double repulsion(double d) {
-	return (CRIT_DIST - d) / CRIT_DIST;
+	return (params.CRIT_DIST - d) / params.CRIT_DIST;
 }
 
-
-//  Read the the Laser data. If there is an obstacle close r the robot, stop and turn
-// otherwise move ahead. 
-
-void callbackLaser(const sensor_msgs::LaserScan& scan) {
-	double lowest = 1e9;
-	double lowest_angle = 0;
-	double sx = 0;
-	double sy = 0;
-	for (size_t i = 0; i < scan.ranges.size(); i++) {
-		double r = scan.ranges[i];
-		if (!std::isfinite(r) || r < scan.range_min || r > scan.range_max) continue;
-		double angle = scan.angle_min + i * scan.angle_increment;
-		if (std::fabs(angle) > CONE_HALF_ANGLE) continue;
-		if (r < lowest) { lowest = r; lowest_angle = angle; }
-
-		if (ALGOR == 2 && r < CRIT_DIST) {
-			double mag = repulsion(r);
-			sx += mag * (-std::cos(angle));
-			sy += mag * (-std::sin(angle));
-		}
+bool isObstacle() {
+	for (size_t i = 0; i < robot.scan.ranges.size(); i++) {
+		double r = robot.scan.ranges[i];
+		if (!std::isfinite(r) || r < robot.scan.range_min) continue;
+		double angle = robot.scan.angle_min + i * robot.scan.angle_increment;
+		if (std::fabs(angle) > CONE_HALF_ANGLE) continue;   // simple algorithm: frontal cone only
+		if (r < params.CRIT_DIST) return true;
 	}
-	if (ALGOR=2) {
-		V_obs.x = sx;
-		V_obs.y = sy;
-	}
-
-	if (ALGOR=1) {
-		is_intense = (lowest < CRIT_DIST);
-		if (is_intense && state != DONE) {
-			if (state != ROTATE) {
-				rot_left_or_right = (lowest_angle < 0);
-				time_begin = ros::Time(0);
-			}
-			state = ROTATE;
-		}	
-	}
+	return false;
 }
 
-
-// Print the odometry location.
-void callbackOdom(const nav_msgs::Odometry odom) {
-	double Xr = odom.pose.pose.position.x;
-	double Yr = odom.pose.pose.position.y;
-	double current_z=odom.pose.pose.orientation.z;
-	double current_w=odom.pose.pose.orientation.w;
-	double orientationr=(2.0*atan2(current_z,current_w));
-	double ori = tf::getYaw(odom.pose.pose.orientation);
-	// print the state as well
-	//ROS_INFO("State: %s, Odom X=%lf, Y=%lf, ori=%lf, ori2=%lf\n", printStateName(state).c_str(), Xr, Yr,orientationr, ori);
-	
-	if (is_goal_set) {
-		ori_error = calcOriError(goal, odom.pose.pose.position, tf::getYaw(odom.pose.pose.orientation));
-		V_goal.x = std::cos(ori_error);
-		V_goal.y = std::sin(ori_error);
-		//ROS_INFO("ORI_ERROR: %lf\n", ori_error);
-		dist_goal = std::hypot(goal.x - odom.pose.pose.position.x,
-		               goal.y - odom.pose.pose.position.y);
-		have_odom = true;
-		if (ROBOT_ROLE == 1 && dist_goal < DIST_LEADER) {
-			state = STOP;
-		}
+void updateVobs() {
+	double sx = 0.0, sy = 0.0;
+	d_min = 1e9;
+	for (size_t i = 0; i < robot.scan.ranges.size(); i++) {
+		double d = robot.scan.ranges[i];
+		if (!std::isfinite(d) || d < robot.scan.range_min || d > robot.scan.range_max) continue;
+		if (d < d_min) d_min = d;
+		if (d >= params.CRIT_DIST) continue;
+		double phi = robot.scan.angle_min + i * robot.scan.angle_increment;
+		double mag = repulsion(d);
+		sx += mag * (-std::cos(phi));
+		sy += mag * (-std::sin(phi));
 	}
+	V_obs.x = sx;
+	V_obs.y = sy;
 }
 
-void callbackLeadOdom(const nav_msgs::Odometry odom) {
-	goal.x = odom.pose.pose.position.x;
-	goal.y = odom.pose.pose.position.y;
-	is_goal_set = true;
+// ---- callbacks ----
+void callbackLaser(const sensor_msgs::LaserScan::ConstPtr& msg) {
+	robot.scan = *msg;
+	robot.isScan = true;
 }
 
+void callbackGoal(const geometry_msgs::Point::ConstPtr& msg) {
+	robot.Xgoal = msg->x;
+	robot.Ygoal = msg->y;
+	robot.isGoal = true;
+}
+
+void callbackOdom(const nav_msgs::Odometry::ConstPtr& odom) {
+	robot.Xr = odom->pose.pose.position.x;
+	robot.Yr = odom->pose.pose.position.y;
+	robot.Thetar = tf::getYaw(odom->pose.pose.orientation);
+	robot.isOdom = true;
+
+	geometry_msgs::Point p; // publish own position (leader -> follower)
+	p.x = robot.Xr;
+	p.y = robot.Yr;
+	position_pub.publish(p);
+}
+
+// ---- parameters ----
 void readParams() {
 	ros::NodeHandle nh_private("~");
-	nh_private.param("ID_ROBOT", ID_ROBOT, 0);
-	nh_private.param("CRIT_DIST", CRIT_DIST, 1.0);
-	nh_private.param("V_MAX_DES", V_MAX_DES, 1.0);
-	nh_private.param("V_MAX_ROT", V_MAX_ROT, 1.0);
-	nh_private.param("D_OBJ", D_OBJ, 0.2);
-	nh_private.param("K_ROT_MIN", K_ROT_MIN, 0.1);
-	nh_private.param("K_ROT_MAX", K_ROT_MAX, 0.25);
-	nh_private.param("ORI_ERROR", ORI_ERROR, 0.45);
-	nh_private.param("T_AVOID_OBS", T_AVOID_OBS, 2.0);
-	nh_private.param("DIST_LEADER", DIST_LEADER, 2.0);
-	nh_private.param("ROBOT_ROLE", ROBOT_ROLE, 0);
-	nh_private.param("ID_LEADER", ID_LEADER, -1);
-	nh_private.param("W_1", W_1, 1.5);
-	nh_private.param("W_2", W_2, 3.0);
-	nh_private.param("T_WAIT", T_WAIT, 150);
-	nh_private.param("ALGOR", ALGOR, 1);
-}*/
+	bool ok = true;
+	ok &= nh_private.param("ID_ROBOT", params.ID_ROBOT, 0);
+	ok &= nh_private.param("CRIT_DIST", params.CRIT_DIST, 1.0);
+	ok &= nh_private.param("V_MAX_DES", params.V_MAX_DES, 1.0);
+	ok &= nh_private.param("V_MAX_ROT", params.V_MAX_ROT, 1.0);
+	ok &= nh_private.param("D_OBJ", params.D_OBJ, 0.2);
+	ok &= nh_private.param("K_ROT_MIN", params.K_ROT_MIN, 0.1);
+	ok &= nh_private.param("K_ROT_MAX", params.K_ROT_MAX, 0.25);
+	ok &= nh_private.param("ORI_ERROR", params.ORI_ERROR, 0.45);
+	ok &= nh_private.param("T_AVOID_OBS", params.T_AVOID_OBS, 2.0);
+	ok &= nh_private.param("DIST_LEADER", params.DIST_LEADER, 2.0);
+	ok &= nh_private.param("ROBOT_ROLE", params.ROBOT_ROLE, 0);
+	ok &= nh_private.param("ID_LEADER", params.ID_LEADER, -1);
+	ok &= nh_private.param("W_1", params.W_1, 1.5);
+	ok &= nh_private.param("W_2", params.W_2, 3.0);
+	ok &= nh_private.param("T_WAIT", params.T_WAIT, 150);
+	ok &= nh_private.param("ALGOR", params.ALGOR, 1);
 
+	ROS_INFO("ID=%d ALGOR=%d ROLE=%d CRIT_DIST=%.2f D_OBJ=%.2f V_MAX_DES=%.2f V_MAX_ROT=%.2f",
+	         params.ID_ROBOT, params.ALGOR, params.ROBOT_ROLE, params.CRIT_DIST,
+	         params.D_OBJ, params.V_MAX_DES, params.V_MAX_ROT);
+	ROS_INFO("K_ROT_MIN=%.2f K_ROT_MAX=%.2f ORI_ERROR=%.2f T_AVOID_OBS=%.2f DIST_LEADER=%.2f",
+	         params.K_ROT_MIN, params.K_ROT_MAX, params.ORI_ERROR,
+	         params.T_AVOID_OBS, params.DIST_LEADER);
+	ROS_INFO("W_1=%.2f W_2=%.2f T_WAIT=%d ID_LEADER=%d",
+	         params.W_1, params.W_2, params.T_WAIT, params.ID_LEADER);
+
+	if (!ok) ROS_WARN("Some parameters were missing - defaults used, check the launch file");
+	if (params.ALGOR != 1 && params.ALGOR != 2)
+		ROS_WARN("ALGOR=%d is not 1 or 2, using simple avoidance", params.ALGOR);
+	if (params.ROBOT_ROLE != 0 && params.ROBOT_ROLE != 1)
+		ROS_WARN("ROBOT_ROLE=%d is not 0 or 1, acting as leader", params.ROBOT_ROLE);
+}
+
+// ---- algorithm 1: simple obstacle avoidance ----
+void simpleAvoidanceController() {
+	double dx = robot.Xgoal - robot.Xr;
+	double dy = robot.Ygoal - robot.Yr;
+	double distance = std::hypot(dx, dy);
+	double ori_error = wrapAngle(std::atan2(dy, dx) - robot.Thetar);
+	geometry_msgs::Twist cmd_vel;
+
+	switch (state) {
+	case WAIT_GOAL:
+		ROS_INFO_THROTTLE(1.0, "%d[WAIT_GOAL] goal=%d odom=%d scan=%d",
+		                  params.ID_ROBOT, robot.isGoal, robot.isOdom, robot.isScan);
+		if (robot.isGoal && robot.isOdom && robot.isScan) state = FACE_GOAL;
+		break;
+	case FACE_GOAL:
+		cmd_vel.angular.z = rotVel(ori_error);
+		if (std::fabs(ori_error) < params.ORI_ERROR) state = GO;
+		ROS_INFO_THROTTLE(0.5, "%d[FACE_GOAL] dist=%.2f err=%.1f deg",
+		                  params.ID_ROBOT, distance, ori_error * 180 / M_PI);
+		break;
+	case GO:
+		cmd_vel.angular.z = rotVel(ori_error);
+		cmd_vel.linear.x = params.V_MAX_DES;
+		if (isObstacle()) state = ROTATE;
+		if (distance < params.D_OBJ) state = DONE;
+		ROS_INFO_THROTTLE(0.5, "%d[GO] dist=%.2f err=%.1f deg",
+		                  params.ID_ROBOT, distance, ori_error * 180 / M_PI);
+		break;
+	case ROTATE:
+		cmd_vel.angular.z = params.V_MAX_ROT;
+		if (!isObstacle()) {
+			state = FORWARD;
+			start = ros::Time::now();
+		}
+		ROS_INFO_THROTTLE(0.5, "%d[ROTATE]", params.ID_ROBOT);
+		break;
+	case FORWARD:
+		cmd_vel.linear.x = params.V_MAX_DES;
+		if (isObstacle())
+			state = ROTATE;
+		else if (ros::Time::now() - start > ros::Duration(params.T_AVOID_OBS))
+			state = FACE_GOAL;
+		ROS_INFO_THROTTLE(0.5, "%d[FORWARD]", params.ID_ROBOT);
+		break;
+	case DONE:
+		ROS_INFO_THROTTLE(1.0, "%d[DONE] dist=%.2f", params.ID_ROBOT, distance);
+		if (distance >= params.D_OBJ) state = FACE_GOAL;  // follower resumes when leader moves away
+		break;
+	}
+	cmd_vel_pub.publish(cmd_vel);
+}
+
+// ---- algorithm 2: potential fields ----
+void potentialFieldsController() {
+	if (!(robot.isGoal && robot.isOdom && robot.isScan)) return;
+
+	double dx = robot.Xgoal - robot.Xr;
+	double dy = robot.Ygoal - robot.Yr;
+	double distance = std::hypot(dx, dy);
+	double stop_dist = (params.ROBOT_ROLE == 1) ? params.DIST_LEADER : params.D_OBJ;
+	geometry_msgs::Twist cmd_vel;
+
+	if (distance < stop_dist) {
+		pf_lin = 0.0;
+		pf_ang = 0.0;
+		have_decision = false;
+		cmd_vel_pub.publish(cmd_vel); // explicit stop
+		return;
+	}
+
+	ros::Time now = ros::Time::now();
+	if (!have_decision || (now - last_decision).toSec() >= params.T_WAIT / 1000.0) {
+		double ori_error = wrapAngle(std::atan2(dy, dx) - robot.Thetar);
+		V_goal.x = std::cos(ori_error);// unit vector, robot frame
+		V_goal.y = std::sin(ori_error);
+		updateVobs();
+
+		V_f.x = params.W_1 * V_goal.x + params.W_2 * V_obs.x;
+		V_f.y = params.W_1 * V_goal.y + params.W_2 * V_obs.y;
+
+		if (std::hypot(V_f.x, V_f.y) > 1e-6) {
+			double heading_err = std::atan2(V_f.y, V_f.x);	
+			pf_ang = rotVel(heading_err);
+			const double FLOOR = 0.2; // minimum fraction of speed
+			double near  = std::min(1.0, d_min / params.CRIT_DIST); // 1 = clear, 0 = touching
+			double align = std::max(0.0, std::cos(heading_err)); // 1 = V ahead, 0 = V sideways/behind
+			pf_lin = params.V_MAX_DES * near * (FLOOR + (1.0 - FLOOR) * align);
+		}
+		last_decision = now;
+		have_decision = true;
+		ROS_INFO("PF: Vg=(%.2f,%.2f) Vobs=(%.2f,%.2f) err=%.2f lin=%.2f ang=%.2f",
+		         V_goal.x, V_goal.y, V_obs.x, V_obs.y,
+		         std::atan2(V_f.y, V_f.x), pf_lin, pf_ang);
+	}
+
+	cmd_vel.linear.x = pf_lin;                           // last decision, sent every cycle
+	cmd_vel.angular.z = pf_ang;
+	cmd_vel_pub.publish(cmd_vel);
+}
+
+// ---- main ----
 int main(int argc, char **argv) {
-	/*ros::init(argc, argv, "moveRobot");
+	ros::init(argc, argv, "moveRobot");
 	ros::NodeHandle nh;
-	ros::Rate r(50);
-	ros::Subscriber goal_sub;
-	ros::Subscriber lead_odom_sub;
-	// subscribe to the myGoals topic
 	readParams();
-	if (ROBOT_ROLE == 0) {
+
+	std::ostringstream parent;
+	parent << "robot_" << params.ID_ROBOT;
+	std::string prefix = parent.str();
+
+	// publishers first, so callbacks can use them as soon as they fire
+	cmd_vel_pub  = nh.advertise<geometry_msgs::Twist>(prefix + "/cmd_vel", 10);
+	position_pub = nh.advertise<geometry_msgs::Point>(prefix + "/position", 1);
+
+	ros::Subscriber odom_sub  = nh.subscribe(prefix + "/odom", 10, callbackOdom);
+	ros::Subscriber laser_sub = nh.subscribe(prefix + "/base_scan_1", 1, callbackLaser);
+
+	ros::Subscriber goal_sub;
+	if (params.ROBOT_ROLE == 1) {                        // follower: goal = leader's position
+		std::ostringstream leader;
+		leader << "robot_" << params.ID_LEADER;
+		goal_sub = nh.subscribe(leader.str() + "/position", 1, callbackGoal);
+		params.D_OBJ = params.DIST_LEADER;
+	} else {                                             // leader: goal from talkerGoals
 		goal_sub = nh.subscribe("/myGoals", 10, callbackGoal);
 	}
 
-	//Build a string with the odom topic
-	std::string odom_topic_name = "robot_";
-	odom_topic_name += std::to_string(ID_ROBOT);
-	odom_topic_name += "/odom";
-	// subscribe to robot's odom topic "robot_X/base_scan"
-	ros::Subscriber odom_sub = nh.subscribe(odom_topic_name, 10, callbackOdom);
-
-	if (ROBOT_ROLE == 1) {
-		std::string lead_odom_topic_name = "robot_";
-		lead_odom_topic_name += std::to_string(ID_LEADER);
-		lead_odom_topic_name += "/odom";
-		lead_odom_sub = nh.subscribe(lead_odom_topic_name, 10, callbackLeadOdom);
-	}
-
-	// Subscribe to the robot laser topic
-	std::string sonar_scan_topic_name = "robot_";
-	sonar_scan_topic_name += std::to_string(ID_ROBOT);
-	sonar_scan_topic_name += "/base_scan_1";
-	ros::Subscriber sub = nh.subscribe(sonar_scan_topic_name, 1, callbackLaser);
-
-	// publish robot cmd_vel topic
-	std::string cmd_vel_topic_name = "robot_";
-	cmd_vel_topic_name += std::to_string(ID_ROBOT);
-	cmd_vel_topic_name += "/cmd_vel";
-	cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(cmd_vel_topic_name, 10);
-
-	while(ros::ok()) {
+	ros::Rate rate(50);
+	while (ros::ok()) {
 		ros::spinOnce();
-
-		if (have_odom && is_goal_set) {
-			cmdVel();
-		}
-
-		r.sleep();
-	}*/
-	
-	ros::init(argc, argv, "moveRobot");
-	MoveRobot mvR;
-	mvR.readParams();
-	mvR.run();
-
-
+		if (params.ALGOR == 2) potentialFieldsController();
+		else                   simpleAvoidanceController();
+		rate.sleep();
+	}
 	return 0;
 }
-

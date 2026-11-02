@@ -22,7 +22,7 @@
 		<param name="ROBOT_ROLE" value="0" />
 		<param name="ID_LEADER" value="-1" />
 		<param name="W_1" value="1.5" />
-		<param name="W_2" value="3.0" />
+		<param name="W_2" value="5.0" />
 		<param name="T_WAIT" value="150" />
 	</node>
 
@@ -41,7 +41,7 @@
 		<param name="ROBOT_ROLE" value="1" />
 		<param name="ID_LEADER" value="0" />
 		<param name="W_1" value="1.5" />
-		<param name="W_2" value="3.0" />
+		<param name="W_2" value="5.0" />
 		<param name="T_WAIT" value="150" />
 	</node>
 </launch>

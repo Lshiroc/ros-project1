@@ -9,23 +9,24 @@
 
 void MoveRobot::readParams() {
 	ros::NodeHandle nh_private("~");
-	nh_private.param("ID_ROBOT", params.ID_ROBOT, 0);
-	nh_private.param("CRIT_DIST", params.CRIT_DIST, 1.0);
-	nh_private.param("V_MAX_DES", params.V_MAX_DES, 1.0);
-	nh_private.param("V_MAX_ROT", params.V_MAX_ROT, 1.0);
-	nh_private.param("D_OBJ", params.D_OBJ, 0.2);
-	nh_private.param("K_ROT_MIN", params.K_ROT_MIN, 0.1);
-	nh_private.param("K_ROT_MAX", params.K_ROT_MAX, 0.25);
-	nh_private.param("ORI_ERROR", params.ORI_ERROR, 0.45);
-	nh_private.param("T_AVOID_OBS", params.T_AVOID_OBS, 2.0);
-	nh_private.param("DIST_LEADER", params.DIST_LEADER, 2.0);
-	nh_private.param("ROBOT_ROLE", params.ROBOT_ROLE, 0);
-	nh_private.param("ID_LEADER", params.ID_LEADER, -1);
-	nh_private.param("W_1", params.W_1, 1.5);
-	nh_private.param("W_2", params.W_2, 3.0);
-	nh_private.param("T_WAIT", params.T_WAIT, 150);
-	nh_private.param("ALGOR", params.ALGOR, 1);
-
+	bool ok = true;
+	ok &= nh_private.param("ID_ROBOT", params.ID_ROBOT, 0);
+	ok &= nh_private.param("CRIT_DIST", params.CRIT_DIST, 1.0);
+	ok &= nh_private.param("V_MAX_DES", params.V_MAX_DES, 1.0);
+	ok &= nh_private.param("V_MAX_ROT", params.V_MAX_ROT, 1.0);
+	ok &= nh_private.param("D_OBJ", params.D_OBJ, 0.2);
+	ok &= nh_private.param("K_ROT_MIN", params.K_ROT_MIN, 0.1);
+	ok &= nh_private.param("K_ROT_MAX", params.K_ROT_MAX, 0.25);
+	ok &= nh_private.param("ORI_ERROR", params.ORI_ERROR, 0.45);
+	ok &= nh_private.param("T_AVOID_OBS", params.T_AVOID_OBS, 2.0);
+	ok &= nh_private.param("DIST_LEADER", params.DIST_LEADER, 2.0);
+	ok &= nh_private.param("ROBOT_ROLE", params.ROBOT_ROLE, 0);
+	ok &= nh_private.param("ID_LEADER", params.ID_LEADER, -1);
+	ok &= nh_private.param("W_1", params.W_1, 1.5);
+	ok &= nh_private.param("W_2", params.W_2, 3.0);
+	ok &= nh_private.param("T_WAIT", params.T_WAIT, 150);
+	ok &= nh_private.param("ALGOR", params.ALGOR, 1);
+	
 	ROS_INFO("ID_ROBOT=%d", params.ID_ROBOT);
 	ROS_INFO("ALGOR=%d", params.ALGOR);
 	ROS_INFO("CRIT_DIST=%lf", params.CRIT_DIST);
@@ -42,6 +43,13 @@ void MoveRobot::readParams() {
 	ROS_INFO("W_1=%lf", params.W_1);
 	ROS_INFO("W_2=%lf", params.W_2);
 	ROS_INFO("T_WAIT=%d", params.T_WAIT);
+
+	if (!ok)
+		ROS_WARN("Some parameters were missing - check the launch file");
+	if (param.ALGOR != 1 && param.ALGOR != 2)
+		ROS_WARN("ALGOR=%d is not 1 or 2, using simple avoidance", param.ALGOR);
+	if (param.ROBOT_ROLE != 0 && param.ROBOT_ROLE != 1)
+		ROS_WARN("ROBOT_ROLE=%d is not 0 or 1, acting as leader", param.ROBOT_ROLE);
 }
 
 void MoveRobot::callbackLaser(const sensor_msgs::LaserScan& most_intense) {
