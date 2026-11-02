@@ -1,0 +1,47 @@
+ <launch>
+	<node name="Stage" pkg="stage_ros" type="stageros" args="$(find first_demo)/worlds/mundo.world"/>
+
+	<node name="talkerGoals" pkg="first_demo" type="talkerGoals" output="screen">
+		<param name="X_GOAL" value="0" />
+		<param name="Y_GOAL" value="-9.5" />
+		<param name="T_GOAL" value="5" />
+	</node>
+
+	<node name="moveRobot" pkg="first_demo" type="moveRobot" output="screen">
+		<param name="ID_ROBOT" value="0" />
+		<param name="ALGOR" value="2" />
+		<param name="CRIT_DIST" value="1" />
+		<param name="V_MAX_DES" value="1" />
+		<param name="V_MAX_ROT" value="1" />
+		<param name="D_OBJ" value="0.4" />
+		<param name="K_ROT_MIN" value="0.1" />
+		<param name="K_ROT_MAX" value="0.25" />
+		<param name="ORI_ERROR" value="0.15" />
+		<param name="T_AVOID_OBS" value="2.0" />
+		<param name="DIST_LEADER" value="2.0" />
+		<param name="ROBOT_ROLE" value="0" />
+		<param name="ID_LEADER" value="-1" />
+		<param name="W_1" value="1.5" />
+		<param name="W_2" value="3.0" />
+		<param name="T_WAIT" value="150" />
+	</node>
+
+	<node name="moveRobot2" pkg="first_demo" type="moveRobot" output="screen">
+		<param name="ID_ROBOT" value="1" />
+		<param name="ALGOR" value="2" />
+		<param name="CRIT_DIST" value="1" />
+		<param name="V_MAX_DES" value="1" />
+		<param name="V_MAX_ROT" value="1" />
+		<param name="D_OBJ" value="0.4" />
+		<param name="K_ROT_MIN" value="0.1" />
+		<param name="K_ROT_MAX" value="0.25" />
+		<param name="ORI_ERROR" value="0.15" />
+		<param name="T_AVOID_OBS" value="2.0" />
+		<param name="DIST_LEADER" value="2.0" />
+		<param name="ROBOT_ROLE" value="1" />
+		<param name="ID_LEADER" value="0" />
+		<param name="W_1" value="1.5" />
+		<param name="W_2" value="3.0" />
+		<param name="T_WAIT" value="150" />
+	</node>
+</launch>

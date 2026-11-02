@@ -1,0 +1,7 @@
+ <launch>
+<node name="Stage" pkg="stage_ros" type="stageros" args="$(find first_demo)/worlds/mundo.world"/>
+
+<node name="straightLineExamp" pkg="first_demo" type="straightLineExamp" output="screen">
+   <param name="velMax" value="0.1" />
+</node>
+</launch>
